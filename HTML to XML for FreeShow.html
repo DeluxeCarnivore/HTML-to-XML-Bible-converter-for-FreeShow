@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RqLbLsY6kW7LEOOMvvFZfDi5QsK+tZp3EML0Txo7P9M='; script-src-attr 'none'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="x-dns-prefetch-control" content="off">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bible XML Converter</title>
+<style>
+  :root {
+    --ink: #121309;
+    --panel: #1b1c14;
+    --panel-2: #232419;
+    --line: #34351f;
+    --text: #e9e4d4;
+    --muted: #948d76;
+    --brass: #c9a24d;
+    --brass-dim: #8a7038;
+    --bad: #c96b4d;
+    --good: #8fae6b;
+    --serif: Georgia, "Times New Roman", serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--mono);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    min-height: 100vh;
+    padding: 64px 24px 96px;
+  }
+  main {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 30px;
+    letter-spacing: 0.01em;
+    margin: 0 0 6px;
+    color: var(--text);
+  }
+  .lede {
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--muted);
+    margin: 0 0 40px;
+    line-height: 1.5;
+    max-width: 52ch;
+  }
+  .lede em {
+    color: var(--brass);
+    font-style: normal;
+  }
+
+  .drop {
+    border: 1px dashed var(--line);
+    border-radius: 3px;
+    padding: 36px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    background: var(--panel);
+  }
+  .drop:hover, .drop:focus-visible {
+    border-color: var(--brass-dim);
+    outline: none;
+  }
+  .drop.drag {
+    border-color: var(--brass);
+    background: var(--panel-2);
+  }
+  .drop .icon {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .drop .filename {
+    font-family: var(--serif);
+    font-size: 19px;
+    color: var(--text);
+    margin-top: 10px;
+  }
+  .drop .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+  .drop input { display: none; }
+
+  section.panel {
+    margin-top: 28px;
+    display: none;
+  }
+  section.panel.show { display: block; }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field.full { grid-column: 1 / -1; }
+  label {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  input[type=text] {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 9px 10px;
+    border-radius: 2px;
+  }
+  input[type=text]:focus {
+    outline: none;
+    border-color: var(--brass-dim);
+  }
+
+  .format-toggle {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 18px;
+  }
+  .format-toggle button {
+    flex: 1;
+    background: var(--panel);
+    color: var(--muted);
+    border: none;
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 11px 8px;
+    cursor: pointer;
+    border-right: 1px solid var(--line);
+  }
+  .format-toggle button:last-child { border-right: none; }
+  .format-toggle button.active {
+    background: var(--panel-2);
+    color: var(--brass);
+  }
+  .format-note {
+    font-size: 12px;
+    color: var(--muted);
+    margin: -10px 0 18px;
+    line-height: 1.5;
+  }
+
+  button.convert {
+    width: 100%;
+    background: var(--brass);
+    color: #201a0a;
+    border: none;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    padding: 13px;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  button.convert:hover { background: #d8b565; }
+  button.convert:disabled {
+    background: var(--panel-2);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+
+  .status {
+    margin-top: 18px;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+  .status.err { color: var(--bad); }
+
+  .result {
+    margin-top: 18px;
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    display: none;
+  }
+  .result.show { display: block; }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, auto);
+    gap: 6px 22px;
+    font-size: 13px;
+    margin-bottom: 18px;
+  }
+  .stats .n { color: var(--brass); font-weight: 600; }
+  .stats .l { color: var(--muted); font-size: 11px; display: block; }
+
+  a.download {
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    border: 1px solid var(--good);
+    color: var(--good);
+    font-size: 13px;
+    padding: 12px;
+    border-radius: 2px;
+  }
+  a.download:hover { background: rgba(143,174,107,0.08); }
+
+  details {
+    margin-top: 48px;
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+  }
+  summary {
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+  details p, details li {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  details ul { padding-left: 18px; }
+  code {
+    background: var(--panel-2);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--text);
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Bible XML Converter for FreeShow</h1>
+  <p class="lede">Turns an <em>HTML Bible export</em> into Zefania or OSIS XML for FreeShow. Runs entirely in this page &mdash; nothing you drop here ever leaves your machine.</p>
+
+  <div class="drop" id="drop" tabindex="0">
+    <div class="icon" id="dropIcon">Drop an .html file here, or click to browse</div>
+    <div class="filename" id="dropFilename" style="display:none"></div>
+    <div class="hint" id="dropHint" style="display:none">Drop a different file to replace it</div>
+    <input type="file" id="fileInput" accept=".html,.htm">
+  </div>
+
+  <section class="panel" id="panel">
+    <div class="format-toggle">
+      <button type="button" id="btnZefania" class="active">Zefania</button>
+      <button type="button" id="btnOsis">OSIS</button>
+    </div>
+    <p class="format-note" id="formatNote"></p>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="fName">Bible name</label>
+        <input type="text" id="fName" placeholder="New King James Version">
+      </div>
+      <div class="field" id="workIdField" style="display:none">
+        <label for="fWorkId">Work ID (OSIS only)</label>
+        <input type="text" id="fWorkId" placeholder="NKJV">
+      </div>
+      <div class="field full">
+        <label for="fDesc">Description</label>
+        <input type="text" id="fDesc" placeholder="Defaults to the name above">
+      </div>
+    </div>
+
+    <button type="button" class="convert" id="btnConvert">Convert</button>
+    <div class="status" id="status"></div>
+
+    <div class="result" id="result">
+      <div class="stats" id="stats"></div>
+      <a class="download" id="downloadLink">Download XML</a>
+    </div>
+  </section>
+
+  <details>
+    <summary>What this handles</summary>
+    <p>Expects the "<code>&lt;!-- Source N: NN_bookname.htm --&gt;</code>" style export: a comment marks each book, <code>&lt;h4&gt;</code> marks each chapter, and each verse is a <code>&lt;p&gt;</code> starting with <code>&lt;sup&gt;N&lt;/sup&gt;</code>.</p>
+    <p>It also works around five real data quirks found across several such files:</p>
+    <ul>
+      <li>Malformed <code>&lt;pb&gt;</code> tags that silently swallow later chapters</li>
+      <li>A stray unclosed <code>&lt;font&gt;</code> right after a chapter heading, with the same effect</li>
+      <li>A verse's leading <code>&lt;sup&gt;</code> nested inside a wrapper tag, which can merge several verses into one</li>
+      <li>Genuinely empty red-letter spans (a verse folded into its neighbor)</li>
+      <li>Doubly-wrapped red-letter spans, which would otherwise produce broken nested tags</li>
+    </ul>
+    <p>The OSIS output also works around two quirks in how FreeShow itself parses red-letter text (an invisible padding character so an all-red verse isn't dropped, and non-breaking spaces so words don't run together between two red spans) &mdash; both confirmed against FreeShow's own source.</p>
+  </details>
+    <details>
+    <summary>How To Download Bible HTML</summary>
+    <p>Steps:</p>
+    <ul>
+      <li>Download a book from <a href="https://www.ph4.org/b4_poisk.php" target="_blank" rel="noopener noreferrer">ph4</a>.</li>
+      <li>Merge all HTML files using <a href="https://www.merge-json-files.com/html-merger" target="_blank" rel="noopener noreferrer">Merge HTML Files Online</a>.</li>
+      <li>Drag the merged HTML file here.</li>
+      <li>Choose Zefania or OSIS.</li>
+      <li>Click Convert.</li>
+    </ul>
+  </details>
+</main>
+</main>
+
+<script>
+/* ---------- Conversion core (ported 1:1 from the validated Python scripts) ---------- */
+// Shared BOOK_MAP: slug -> [order, ZefaniaName, ZefaniaShort, OsisID]
+const BOOK_MAP = {
+    genesis: [1, "Genesis", "Gen", "Gen"],
+    exodus: [2, "Exodus", "Exod", "Exod"],
+    leviticus: [3, "Leviticus", "Lev", "Lev"],
+    numbers: [4, "Numbers", "Num", "Num"],
+    deuteronomy: [5, "Deuteronomy", "Deut", "Deut"],
+    joshua: [6, "Joshua", "Josh", "Josh"],
+    judges: [7, "Judges", "Judg", "Judg"],
+    ruth: [8, "Ruth", "Ruth", "Ruth"],
+    "1samuel": [9, "1 Samuel", "1Sam", "1Sam"],
+    "2samuel": [10, "2 Samuel", "2Sam", "2Sam"],
+    "1kings": [11, "1 Kings", "1Kgs", "1Kgs"],
+    "2kings": [12, "2 Kings", "2Kgs", "2Kgs"],
+    "1chronicles": [13, "1 Chronicles", "1Chr", "1Chr"],
+    "2chronicles": [14, "2 Chronicles", "2Chr", "2Chr"],
+    ezra: [15, "Ezra", "Ezra", "Ezra"],
+    nehemiah: [16, "Nehemiah", "Neh", "Neh"],
+    esther: [17, "Esther", "Esth", "Esth"],
+    job: [18, "Job", "Job", "Job"],
+    psalms: [19, "Psalms", "Ps", "Ps"],
+    proverbs: [20, "Proverbs", "Prov", "Prov"],
+    ecclesiastes: [21, "Ecclesiastes", "Eccl", "Eccl"],
+    songofsolomon: [22, "Song of Solomon", "Song", "Song"],
+    isaiah: [23, "Isaiah", "Isa", "Isa"],
+    jeremiah: [24, "Jeremiah", "Jer", "Jer"],
+    lamentations: [25, "Lamentations", "Lam", "Lam"],
+    ezekiel: [26, "Ezekiel", "Ezek", "Ezek"],
+    daniel: [27, "Daniel", "Dan", "Dan"],
+    hosea: [28, "Hosea", "Hos", "Hos"],
+    joel: [29, "Joel", "Joel", "Joel"],
+    amos: [30, "Amos", "Amos", "Amos"],
+    obadiah: [31, "Obadiah", "Obad", "Obad"],
+    jonah: [32, "Jonah", "Jonah", "Jonah"],
+    micah: [33, "Micah", "Mic", "Mic"],
+    nahum: [34, "Nahum", "Nah", "Nah"],
+    habakkuk: [35, "Habakkuk", "Hab", "Hab"],
+    zephaniah: [36, "Zephaniah", "Zeph", "Zeph"],
+    haggai: [37, "Haggai", "Hag", "Hag"],
+    zechariah: [38, "Zechariah", "Zech", "Zech"],
+    malachi: [39, "Malachi", "Mal", "Mal"],
+    matthew: [40, "Matthew", "Matt", "Matt"],
+    mark: [41, "Mark", "Mark", "Mark"],
+    luke: [42, "Luke", "Luke", "Luke"],
+    john: [43, "John", "John", "John"],
+    acts: [44, "Acts", "Acts", "Acts"],
+    romans: [45, "Romans", "Rom", "Rom"],
+    "1corinthians": [46, "1 Corinthians", "1Cor", "1Cor"],
+    "2corinthians": [47, "2 Corinthians", "2Cor", "2Cor"],
+    galatians: [48, "Galatians", "Gal", "Gal"],
+    ephesians: [49, "Ephesians", "Eph", "Eph"],
+    philippians: [50, "Philippians", "Phil", "Phil"],
+    colossians: [51, "Colossians", "Col", "Col"],
+    "1thessalonians": [52, "1 Thessalonians", "1Thess", "1Thess"],
+    "2thessalonians": [53, "2 Thessalonians", "2Thess", "2Thess"],
+    "1timothy": [54, "1 Timothy", "1Tim", "1Tim"],
+    "2timothy": [55, "2 Timothy", "2Tim", "2Tim"],
+    titus: [56, "Titus", "Titus", "Titus"],
+    philemon: [57, "Philemon", "Phlm", "Phlm"],
+    hebrews: [58, "Hebrews", "Heb", "Heb"],
+    james: [59, "James", "Jas", "Jas"],
+    "1peter": [60, "1 Peter", "1Pet", "1Pet"],
+    "2peter": [61, "2 Peter", "2Pet", "2Pet"],
+    "1john": [62, "1 John", "1John", "1John"],
+    "2john": [63, "2 John", "2John", "2John"],
+    "3john": [64, "3 John", "3John", "3John"],
+    jude: [65, "Jude", "Jude", "Jude"],
+    revelations: [66, "Revelation", "Rev", "Rev"],
+    revelation: [66, "Revelation", "Rev", "Rev"],
+};
+
+const SOURCE_RE = /Source\s+\d+:\s*(\d+)_(\w+)\.htm/;
+const BRACKET_NOTE_RE = /\s*\[\(?\d+(?:[\u2010\u2013\u2014-]\d+)?\)?\]\s*/g;
+const ZWSP = "\u200b";
+
+function escapeXml(s) {
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+}
+
+function preprocessRaw(raw) {
+    raw = raw.replace(/<\/?pb\s*\/?>/g, ""); // quirk #1: malformed <pb>
+    raw = raw.replace(/(<\/h4>)<font color="darkred">/g, "$1"); // quirk #2: stray font after h4
+    return raw;
+}
+
+// Drill through wrapper elements to find a <sup> that structurally leads
+// this element's content (quirk #3), however deep it's nested.
+function findLeadingSup(tag) {
+    for (const c of tag.childNodes) {
+        if (c.nodeType === 3) {
+            if (c.nodeValue.trim()) return null;
+            continue;
+        }
+        if (c.nodeType === 1) {
+            if (c.tagName.toLowerCase() === "sup") return c;
+            return findLeadingSup(c);
+        }
+        // comments etc: skip (never occurs inside a <p> in practice)
+    }
+    return null;
+}
+
+function getTextWithSep(node, sep) {
+    const parts = [];
+    (function walk(n) {
+        if (n.nodeType === 3) {
+            parts.push(n.nodeValue);
+        } else if (n.nodeType === 1) {
+            for (const c of n.childNodes) walk(c);
+        }
+    })(node);
+    return parts.join(sep);
+}
+
+function cleanText(s) {
+    s = s.replace(BRACKET_NOTE_RE, " ");
+    s = s.replace(/\s+/g, " ").trim();
+    return s;
+}
+
+// OSIS-mode inline converter: emits real <q who="Jesus" marker=""> around
+// red-letter spans (quirks #4 empty span, #5 doubly-nested span).
+function convertInline(node, inRed) {
+    if (node.nodeType === 3) return escapeXml(node.nodeValue);
+    if (node.nodeType !== 1) return "";
+    const name = node.tagName.toLowerCase();
+    if (name === "br") return " ";
+    if (name === "sup") return "";
+    if (name === "font" && (node.getAttribute("color") || "").toLowerCase() === "darkred") {
+        const inner = Array.from(node.childNodes).map((c) => convertInline(c, true)).join("");
+        if (inRed || !inner.trim()) return inner;
+        return '<q who="Jesus" marker="">' + inner + "</q>";
+    }
+    return Array.from(node.childNodes).map((c) => convertInline(c, inRed)).join("");
+}
+
+// Shared book/chapter/verse walk. mode is "zefania" or "osis"; builds a
+// per-verse array of text chunks using the right leaf-extraction function
+// for that mode, then returns { books } keyed by canonical book order.
+function walkBody(body, mode) {
+    const books = {}; // order -> {slug info..., chapters: {num: {vnum: [chunks]}}}
+    let currentBook = null;
+    let currentChapter = null;
+    let currentVerse = null;
+
+    const extractLeaf =
+        mode === "osis"
+            ? (el) => {
+                  const frag = Array.from(el.childNodes).map((c) => convertInline(c, false)).join("");
+                  return frag.replace(/\s+/g, " ").trim();
+              }
+            : (el) => cleanText(getTextWithSep(el, " "));
+
+    for (const el of Array.from(body.childNodes)) {
+        if (el.nodeType === 8) {
+            const m = SOURCE_RE.exec(el.nodeValue);
+            if (m) {
+                const slug = m[2];
+                if (!(slug in BOOK_MAP)) throw new Error(`Unknown book slug '${slug}' -- add it to BOOK_MAP`);
+                const [order, zName, zShort, osisId] = BOOK_MAP[slug];
+                currentBook = order;
+                if (!books[order]) books[order] = { zName, zShort, osisId, chapters: {} };
+                currentChapter = null;
+                currentVerse = null;
+            }
+            continue;
+        }
+        if (el.nodeType !== 1) continue;
+        const tag = el.tagName.toLowerCase();
+
+        if (tag === "h4") {
+            if (currentBook === null) continue;
+            currentChapter = parseInt(el.textContent.trim(), 10);
+            if (!books[currentBook].chapters[currentChapter]) books[currentBook].chapters[currentChapter] = {};
+            currentVerse = null;
+            continue;
+        }
+
+        if (tag === "p") {
+            if (currentBook === null || currentChapter === null) continue;
+            const sup = findLeadingSup(el);
+            const chapterDict = books[currentBook].chapters[currentChapter];
+
+            if (sup !== null) {
+                currentVerse = parseInt(sup.textContent.trim(), 10);
+                sup.remove();
+                const text = extractLeaf(el);
+                if (!chapterDict[currentVerse]) chapterDict[currentVerse] = [];
+                if (text) chapterDict[currentVerse].push(text);
+            } else {
+                if (currentVerse === null) continue;
+                const text = extractLeaf(el);
+                if (text) {
+                    if (!chapterDict[currentVerse]) chapterDict[currentVerse] = [];
+                    chapterDict[currentVerse].push(text);
+                }
+            }
+        }
+    }
+    return books;
+}
+
+function parseHtml(rawHtml) {
+    const raw = preprocessRaw(rawHtml);
+    const doc = new DOMParser().parseFromString(raw, "text/html");
+    return doc.body;
+}
+
+function convertToZefania(rawHtml, biblename, description) {
+    const body = parseHtml(rawHtml);
+    const books = walkBody(body, "zefania");
+
+    const lines = [];
+    lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+    lines.push(`<XMLBIBLE biblename="${escapeXml(biblename)}" status="v" version="2.0.1.18" type="x-bible" revision="0">`);
+    lines.push("<INFORMATION>");
+    lines.push(`<title>${escapeXml(biblename)}</title>`);
+    lines.push(`<description>${escapeXml(description)}</description>`);
+    lines.push("</INFORMATION>");
+
+    let totalVerses = 0;
+    let totalChapters = 0;
+    const order = Object.keys(books).map(Number).sort((a, b) => a - b);
+    for (const bnumber of order) {
+        const book = books[bnumber];
+        lines.push(`<BIBLEBOOK bnumber="${bnumber}" bname="${escapeXml(book.zName)}" bsname="${escapeXml(book.zShort)}">`);
+        const chNums = Object.keys(book.chapters).map(Number).sort((a, b) => a - b);
+        for (const cnumber of chNums) {
+            totalChapters++;
+            lines.push(`<CHAPTER cnumber="${cnumber}">`);
+            const verses = book.chapters[cnumber];
+            const vNums = Object.keys(verses).map(Number).sort((a, b) => a - b);
+            for (const vnumber of vNums) {
+                let text = verses[vnumber].filter(Boolean).join(" ");
+                text = text.replace(/\s+/g, " ").trim();
+                if (!text) continue;
+                totalVerses++;
+                lines.push(`<VERS vnumber="${vnumber}">${escapeXml(text)}</VERS>`);
+            }
+            lines.push("</CHAPTER>");
+        }
+        lines.push("</BIBLEBOOK>");
+    }
+    lines.push("</XMLBIBLE>");
+
+    return { xml: lines.join("\n"), stats: { books: order.length, chapters: totalChapters, verses: totalVerses } };
+}
+
+function convertToOsis(rawHtml, biblename, description, workId) {
+    const body = parseHtml(rawHtml);
+    const books = walkBody(body, "osis");
+
+    const lines = [];
+    lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+    lines.push('<osis xmlns="http://www.bibletechnologies.net/2003/OSIS/namespace">');
+    lines.push(`<osisText osisIDWork="${escapeXml(workId)}" osisRefWork="bible" xml:lang="en" canonical="true">`);
+    lines.push("<header>");
+    lines.push(`<work osisWork="${escapeXml(workId)}">`);
+    lines.push(`<title>${escapeXml(biblename)}</title>`);
+    lines.push(`<description>${escapeXml(description)}</description>`);
+    lines.push("</work>");
+    lines.push("</header>");
+
+    let totalVerses = 0;
+    let totalChapters = 0;
+    let jesusVerses = 0;
+    const order = Object.keys(books).map(Number).sort((a, b) => a - b);
+    for (const bnumber of order) {
+        const book = books[bnumber];
+        lines.push(`<div type="book" osisID="${book.osisId}" name="${escapeXml(book.zName)}" abbr="${book.osisId}">`);
+        const chNums = Object.keys(book.chapters).map(Number).sort((a, b) => a - b);
+        for (const cnumber of chNums) {
+            totalChapters++;
+            const chapOsisId = `${book.osisId}.${cnumber}`;
+            lines.push(`<chapter osisID="${chapOsisId}">`);
+            const verses = book.chapters[cnumber];
+            const vNums = Object.keys(verses).map(Number).sort((a, b) => a - b);
+            for (const vnumber of vNums) {
+                // NBSP join: a plain space directly between two real <q>
+                // elements is deleted by FreeShow's whitespace normalizer.
+                let text = verses[vnumber].filter(Boolean).join("\u00a0");
+                text = text.replace(/[ \t]+/g, " ").trim();
+                text = text.replace(/(?<=>)( +)(?=<)/g, (m) => "\u00a0".repeat(m.length));
+                if (!text) continue;
+                totalVerses++;
+                if (text.includes('<q who="Jesus"')) {
+                    jesusVerses++;
+                    text = ZWSP + text + ZWSP; // forces FreeShow's mixed-content path
+                }
+                const verseOsisId = `${chapOsisId}.${vnumber}`;
+                lines.push(`<verse osisID="${verseOsisId}">${text}</verse>`);
+            }
+            lines.push("</chapter>");
+        }
+        lines.push("</div>");
+    }
+    lines.push("</osisText>");
+    lines.push("</osis>");
+
+    return {
+        xml: lines.join("\n"),
+        stats: { books: order.length, chapters: totalChapters, verses: totalVerses, jesusVerses },
+    };
+}
+
+if (typeof module !== "undefined") {
+    module.exports = { convertToZefania, convertToOsis, BOOK_MAP };
+}
+
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+const dropIcon = document.getElementById('dropIcon');
+const dropFilename = document.getElementById('dropFilename');
+const dropHint = document.getElementById('dropHint');
+const panel = document.getElementById('panel');
+const btnZefania = document.getElementById('btnZefania');
+const btnOsis = document.getElementById('btnOsis');
+const formatNote = document.getElementById('formatNote');
+const workIdField = document.getElementById('workIdField');
+const fName = document.getElementById('fName');
+const fDesc = document.getElementById('fDesc');
+const fWorkId = document.getElementById('fWorkId');
+const btnConvert = document.getElementById('btnConvert');
+const statusEl = document.getElementById('status');
+const resultEl = document.getElementById('result');
+const statsEl = document.getElementById('stats');
+const downloadLink = document.getElementById('downloadLink');
+
+let currentFile = null;   // { name, text }
+let format = 'zefania';
+let lastObjectUrl = null;
+
+const NOTES = {
+  zefania: 'Plain-text Bible format. Use this for a file with no red-letter (words of Jesus) markup, or if you don\u2019t need that styling preserved.',
+  osis: 'Preserves words-of-Jesus red-letter markup as real data FreeShow can render in red. Use this only if the source actually has that markup \u2014 it\u2019s harmless either way, but Zefania is simpler when it\u2019s not needed.',
+};
+
+function setFormat(f) {
+  format = f;
+  btnZefania.classList.toggle('active', f === 'zefania');
+  btnOsis.classList.toggle('active', f === 'osis');
+  workIdField.style.display = f === 'osis' ? 'flex' : 'none';
+  formatNote.textContent = NOTES[f];
+}
+setFormat('zefania');
+btnZefania.addEventListener('click', () => setFormat('zefania'));
+btnOsis.addEventListener('click', () => setFormat('osis'));
+
+function guessNameFromFilename(filename) {
+  return filename.replace(/\.[^.]+$/, '');
+}
+
+function loadFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    currentFile = { name: file.name, text: reader.result };
+    dropIcon.style.display = 'none';
+    dropFilename.style.display = 'block';
+    dropFilename.textContent = file.name;
+    dropHint.style.display = 'block';
+    panel.classList.add('show');
+    resultEl.classList.remove('show');
+    statusEl.textContent = '';
+    const guess = guessNameFromFilename(file.name);
+    fName.value = guess;
+    fWorkId.value = guess.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    fDesc.value = '';
+  };
+  reader.onerror = () => {
+    statusEl.textContent = 'Could not read that file.';
+    statusEl.classList.add('err');
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+fileInput.addEventListener('change', (e) => loadFile(e.target.files[0]));
+
+['dragenter', 'dragover'].forEach((evt) => {
+  drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.add('drag'); });
+});
+['dragleave', 'drop'].forEach((evt) => {
+  drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.remove('drag'); });
+});
+drop.addEventListener('drop', (e) => {
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  loadFile(file);
+});
+
+btnConvert.addEventListener('click', () => {
+  if (!currentFile) return;
+  statusEl.classList.remove('err');
+  statusEl.textContent = 'Converting\u2026';
+  resultEl.classList.remove('show');
+
+  // Let the status message paint before the (synchronous, possibly
+  // multi-second) parse runs on a multi-MB file.
+  setTimeout(() => {
+    const name = fName.value.trim() || 'Bible';
+    const description = fDesc.value.trim() || name;
+    const workId = fWorkId.value.trim() || name;
+
+    let result;
+    try {
+      result = format === 'zefania'
+        ? convertToZefania(currentFile.text, name, description)
+        : convertToOsis(currentFile.text, name, description, workId);
+    } catch (err) {
+      statusEl.textContent = 'Conversion failed: ' + err.message;
+      statusEl.classList.add('err');
+      return;
+    }
+
+    statusEl.textContent = '';
+    const s = result.stats;
+    statsEl.innerHTML =
+      statPair(s.books, 'books') +
+      statPair(s.chapters, 'chapters') +
+      statPair(s.verses, 'verses') +
+      (format === 'osis' ? statPair(s.jesusVerses, 'words of Jesus') : '');
+
+    if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
+    const blob = new Blob([result.xml], { type: 'application/xml' });
+    lastObjectUrl = URL.createObjectURL(blob);
+    downloadLink.href = lastObjectUrl;
+    downloadLink.download = guessNameFromFilename(currentFile.name) + (format === 'osis' ? '_osis' : '') + '.xml';
+    downloadLink.textContent = 'Download ' + downloadLink.download;
+    resultEl.classList.add('show');
+  }, 10);
+});
+
+function statPair(n, label) {
+  return '<div><span class="n">' + n.toLocaleString() + '</span><span class="l">' + label + '</span></div>';
+}
+</script>
+</body>
+</html>
