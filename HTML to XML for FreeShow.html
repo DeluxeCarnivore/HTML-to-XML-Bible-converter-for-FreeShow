@@ -7,6 +7,9 @@
 <meta http-equiv="x-dns-prefetch-control" content="off">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bible XML Converter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
     --ink: #121309;
@@ -19,8 +22,8 @@
     --brass-dim: #8a7038;
     --bad: #c96b4d;
     --good: #8fae6b;
-    --serif: Georgia, "Times New Roman", serif;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --serif: "Source Serif 4", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -308,7 +311,6 @@
     </ul>
   </details>
 </main>
-</main>
 
 <script>
 /* ---------- Conversion core (ported 1:1 from the validated Python scripts) ---------- */
@@ -388,12 +390,22 @@ const BRACKET_NOTE_RE = /\s*\[\(?\d+(?:[\u2010\u2013\u2014-]\d+)?\)?\]\s*/g;
 const ZWSP = "\u200b";
 
 function escapeXml(s) {
-    return String(s)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&apos;");
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// For values placed inside double-quoted XML attributes: also escapes '"'
+// so a name like Study "Edition" can't break out of the attribute.
+function escapeAttr(s) {
+    return escapeXml(s).replace(/"/g, "&quot;");
+}
+
+// Some translations (NLT) bake a redundant "Psalm N " label and "Book one
+// (Psalms 1-41) " style headings into verse 1 of every Psalm. Strip them.
+const PSALMS_BOOK_NUMBER = 19;
+const PSALM_BOOK_HEADING_RE = /^\s*Book\s+(?:one|two|three|four|five)\s*\(Psalms?[^)]*\)\s*/i;
+function stripPsalmHeading(text, chapterNum) {
+    text = text.replace(PSALM_BOOK_HEADING_RE, "");
+    return text.replace(new RegExp("^\\s*Psalm\\s+" + chapterNum + "\\b[:.,]?\\s*", "i"), "");
 }
 
 function preprocessRaw(raw) {
@@ -503,7 +515,10 @@ function walkBody(body, mode) {
             if (sup !== null) {
                 currentVerse = parseInt(sup.textContent.trim(), 10);
                 sup.remove();
-                const text = extractLeaf(el);
+                let text = extractLeaf(el);
+                if (currentBook === PSALMS_BOOK_NUMBER && currentVerse === 1) {
+                    text = stripPsalmHeading(text, currentChapter);
+                }
                 if (!chapterDict[currentVerse]) chapterDict[currentVerse] = [];
                 if (text) chapterDict[currentVerse].push(text);
             } else {
@@ -531,7 +546,7 @@ function convertToZefania(rawHtml, biblename, description) {
 
     const lines = [];
     lines.push('<?xml version="1.0" encoding="UTF-8"?>');
-    lines.push(`<XMLBIBLE biblename="${escapeXml(biblename)}" status="v" version="2.0.1.18" type="x-bible" revision="0">`);
+    lines.push(`<XMLBIBLE biblename="${escapeAttr(biblename)}" status="v" version="2.0.1.18" type="x-bible" revision="0">`);
     lines.push("<INFORMATION>");
     lines.push(`<title>${escapeXml(biblename)}</title>`);
     lines.push(`<description>${escapeXml(description)}</description>`);
@@ -542,7 +557,7 @@ function convertToZefania(rawHtml, biblename, description) {
     const order = Object.keys(books).map(Number).sort((a, b) => a - b);
     for (const bnumber of order) {
         const book = books[bnumber];
-        lines.push(`<BIBLEBOOK bnumber="${bnumber}" bname="${escapeXml(book.zName)}" bsname="${escapeXml(book.zShort)}">`);
+        lines.push(`<BIBLEBOOK bnumber="${bnumber}" bname="${escapeAttr(book.zName)}" bsname="${escapeAttr(book.zShort)}">`);
         const chNums = Object.keys(book.chapters).map(Number).sort((a, b) => a - b);
         for (const cnumber of chNums) {
             totalChapters++;
@@ -572,9 +587,9 @@ function convertToOsis(rawHtml, biblename, description, workId) {
     const lines = [];
     lines.push('<?xml version="1.0" encoding="UTF-8"?>');
     lines.push('<osis xmlns="http://www.bibletechnologies.net/2003/OSIS/namespace">');
-    lines.push(`<osisText osisIDWork="${escapeXml(workId)}" osisRefWork="bible" xml:lang="en" canonical="true">`);
+    lines.push(`<osisText osisIDWork="${escapeAttr(workId)}" osisRefWork="bible" xml:lang="en" canonical="true">`);
     lines.push("<header>");
-    lines.push(`<work osisWork="${escapeXml(workId)}">`);
+    lines.push(`<work osisWork="${escapeAttr(workId)}">`);
     lines.push(`<title>${escapeXml(biblename)}</title>`);
     lines.push(`<description>${escapeXml(description)}</description>`);
     lines.push("</work>");
@@ -586,7 +601,7 @@ function convertToOsis(rawHtml, biblename, description, workId) {
     const order = Object.keys(books).map(Number).sort((a, b) => a - b);
     for (const bnumber of order) {
         const book = books[bnumber];
-        lines.push(`<div type="book" osisID="${book.osisId}" name="${escapeXml(book.zName)}" abbr="${book.osisId}">`);
+        lines.push(`<div type="book" osisID="${book.osisId}" name="${escapeAttr(book.zName)}" abbr="${book.osisId}">`);
         const chNums = Object.keys(book.chapters).map(Number).sort((a, b) => a - b);
         for (const cnumber of chNums) {
             totalChapters++;
@@ -599,6 +614,8 @@ function convertToOsis(rawHtml, biblename, description, workId) {
                 // elements is deleted by FreeShow's whitespace normalizer.
                 let text = verses[vnumber].filter(Boolean).join("\u00a0");
                 text = text.replace(/[ \t]+/g, " ").trim();
+                // Same issue within one paragraph (two adjacent red spans
+                // separated only by a space).
                 text = text.replace(/(?<=>)( +)(?=<)/g, (m) => "\u00a0".repeat(m.length));
                 if (!text) continue;
                 totalVerses++;
@@ -626,6 +643,7 @@ if (typeof module !== "undefined") {
     module.exports = { convertToZefania, convertToOsis, BOOK_MAP };
 }
 
+/* ---------- UI wiring ---------- */
 const drop = document.getElementById('drop');
 const fileInput = document.getElementById('fileInput');
 const dropIcon = document.getElementById('dropIcon');
